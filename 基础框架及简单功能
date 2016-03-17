@@ -1,0 +1,252 @@
+<!doctype html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="initial-scale=1.0, user-scalable=no, width=device-width">
+    <meta name="author" content="牛蛙">
+    <meta name="description" content="这是一个雾霾展示及分析地图">
+    <title>PM2.5_MapShow&Analyse</title>
+	<link rel="stylesheet" type="text/css" href="default.css" /> 
+    <script src="http://cache.amap.com/lbs/static/es5.min.js"></script>
+    <script src="http://webapi.amap.com/maps?v=1.3&key=0cffab52713eeb2abbf616ddeb1da717&plugin=AMap.Autocomplete,AMap.PlaceSearch"></script>
+    <script type="text/javascript" src="http://cache.amap.com/lbs/static/addToolbar.js"></script>
+    <script type="text/javascript" src="http://cache.amap.com/lbs/static/heatmapData.js"></script>
+</head>
+<body>
+<div class="top">
+<ul>
+<li><h3><strong>此为PM2.5数据展示分析地图，可供分享学习使用</strong></h3></li>
+<li>移动地图，可得到当前地图中心所在省市&nbsp;&nbsp;
+<span id="cityinfo"></span>
+</li>
+<li>可输入关键字进行地点查询：
+<input id="poiinput"/>
+</li>
+</ul>
+</div>
+<div class="right">
+<strong><p>&nbsp;&nbsp;&nbsp;&nbsp;@污染程度</p></strong>
+<form id="pollutionlevel" name="pollutionlevel" method="post">
+    &nbsp;&nbsp;&nbsp;&nbsp;<input type="radio" name="level" value="优" onclick="getLevel('优')"/> 优<br/>
+    &nbsp;&nbsp;&nbsp;&nbsp;<input type="radio" name="level" value="良" onclick="getLevel('良')"/> 良<br/>
+    &nbsp;&nbsp;&nbsp;&nbsp;<input type="radio" name="level" value="轻度污染" onclick="getLevel('轻度污染')"/> 轻度污染<br/>
+    &nbsp;&nbsp;&nbsp;&nbsp;<input type="radio" name="level" value="中度污染" onclick="getLevel('中度污染')"/> 中度污染<br/>
+    &nbsp;&nbsp;&nbsp;&nbsp;<input type="radio" name="level" value="重度污染" onclick="getLevel('重度污染')"/> 重度污染<br/>
+	&nbsp;&nbsp;&nbsp;&nbsp;<input type="radio" name="level" value="总体情况" onclick="getLevel('')"/> 总体情况<br/>
+</form>  
+<form id="date" name="date" method="post" >
+	<strong><p>&nbsp;&nbsp;&nbsp;&nbsp;@污染月份（按alt可以多选）</p></strong>
+    &nbsp;&nbsp;&nbsp;&nbsp;<select name="mon" multiple="multiple" size=8 onChange="" >
+    <option value="13年12月">13年12月</option>
+    <option value="14年01月">14年01月</option>
+    <option value="14年02月">14年02月</option>
+    <option value="14年03月">14年03月</option>
+    <option value="14年04月">14年04月</option>
+    <option value="14年05月">14年05月</option>
+    <option value="14年06月">14年06月</option>
+    <option value="14年07月">14年07月</option>
+    <option value="14年08月">14年08月</option>
+    <option value="14年09月">14年09月</option>
+    <option value="14年10月">14年10月</option>
+    <option value="14年11月">14年12月</option>
+    <option value="14年12月">14年12月</option>
+    <option value="15年01月">15年01月</option>
+    <option value="15年02月">15年02月</option>
+    <option value="15年03月">15年03月</option>
+    <option value="15年04月">15年04月</option>
+    <option value="15年05月">15年05月</option>
+    <option value="15年06月">15年06月</option>
+    <option value="15年07月">15年07月</option>
+    <option value="15年08月">15年08月</option>
+    <option value="15年09月">15年09月</option>
+    <option value="15年10月">15年10月</option>
+    <option value="15年11月">15年11月</option>
+    <option value="15年12月">15年12月</option>
+    <option value="16年01月">16年01月</option>
+    <option value="16年02月">16年02月</option>
+    </select><p>
+</form>
+</div>
+<div id="center"></div>
+<div class="footer">
+<p>&nbsp;&nbsp;&nbsp;&nbsp;数据起止时间为2013年12月至2016年2月</p>
+</div>
+<!--<div class="button-group">
+    <input type="button" class="button" value="显示热力图" style="background:#FFC" onclick="heatmap.show()"/>
+    <input type="button" class="button" value="关闭热力图" style="background:#CC9" onclick="heatmap.hide()"/>
+</div>-->
+</body>
+<script type="text/javascript">
+    //地图初始化
+	mapInit();
+	var map;//地图底图
+    function mapInit()
+    {
+    	map = new AMap.Map('center',
+		{
+        	resizeEnable: true,
+        	zoom:4,
+        	center: [108, 34],
+    	});
+    	addCloudLayer();
+    }
+    //添加比例尺、鹰眼控件
+	AMap.plugin(['AMap.Scale','AMap.OverView'],function()
+	{
+		map.addControl(new AMap.Scale());
+		map.addControl(new AMap.OverView({isOpen:true}));
+	});
+	//获取当前所在省（市）
+	map.on('moveend',getCity);
+    function getCity()
+	{
+        map.getCity(function(data)
+		{
+            if(data['province'] && typeof data['province']==='string')
+			{
+                document.getElementById('cityinfo').innerText='当前城市：'+(data['province'])+(data['city']);
+            }
+        });
+    }
+	//输入提示
+    var autoOptions = 
+    {
+        input:"poiinput"
+    }
+    var auto=new AMap.Autocomplete(autoOptions);
+    var placeSearch=new AMap.PlaceSearch(
+    {
+        map:map
+    }) 
+	//构造地点查询类
+    AMap.event.addListener(auto,"select",select);//注册监听，当选中某条记录时会触发
+    function select(data)
+    {
+        placeSearch.setCity(data.poi.adcode);
+        placeSearch.search(data.poi.name);//关键字查询
+    }
+	//创建右键菜单
+	var contextMenu=new AMap.ContextMenu();
+	contextMenu.addItem("放大一级",function(){map.zoomIn()},0);
+	contextMenu.addItem("缩小一级",function(){map.zoomOut()},1);
+	contextMenu.addItem("缩放至全国范围",function(){map.setZoomAndCenter(4,[108,34])},2);
+	contextMenu.addItem("添加污染源标记",function()
+	{
+	//创建点标记
+	var marker=new AMap.Marker(
+		{
+			map:map,
+			position:contextMenuPosition,//位置即右键创建菜单时的位置
+			draggable:false,
+			raiseOnDrag:true,
+			clickable:true,
+			animation:"AMAP_ANIMATION_DROP",
+			title:"污染源",
+		});
+	},3);
+	//将右击鼠标这一事件绑定为弹出右键菜单
+	map.on('rightclick',function(poi)
+	{
+		contextMenu.open(map,poi.lnglat);
+		contextMenuPosition=poi.lnglat;
+	});
+	//删除点标记
+	
+//	//热力图
+//	var heatmap;
+//    map.plugin(["AMap.Heatmap"],function()
+//	  {
+//        //初始化heatmap对象
+//        heatmap = new AMap.Heatmap(map, 
+//		  {
+//            radius:25, //给定半径
+//            opacity:[0,0.8]
+//            /*,gradient:{
+//             0.5: 'blue',
+//             0.65: 'rgb(117,211,248)',
+//             0.7: 'rgb(0, 255, 0)',
+//             0.9: '#ffea00',
+//             1.0: 'red'
+//             }*/
+//        });
+//        //设置数据集
+//        heatmap.setDataSet(
+//		  {
+//            data:heatmapData,
+//            max:100
+//        });
+//    });
+//    //判断浏览区是否支持canvas
+//    function isSupportCanvas()
+//	  {
+//        var elem = document.createElement('canvas');
+//        return !!(elem.getContext && elem.getContext('2d'));
+//    }
+//	//热力图显示提示
+//	if(!isSupportCanvas()) 
+//	{
+//      alert('热力图仅对支持canvas的浏览器适用,您所使用的浏览器不能使用热力图功能,请换个浏览器试试:-D');
+//  }
+	//加载云图数据
+	var cloudDataLayer;//云数据图层
+    function addCloudLayer()
+    {
+    	AMap.plugin('AMap.CloudDataLayer',function()
+    	{
+    		var layerOptions=
+    		{
+    			query:{keywords:''},
+    			clickable:true,
+    		}
+			var monId='56e22b347bbf197f399dc03c';
+    		cloudDataLayer=new AMap.CloudDataLayer(monId,layerOptions);
+    		cloudDataLayer.setMap(map);
+    		
+    		AMap.event.addListener(cloudDataLayer,'click',function(result)
+    		{
+    			var clouddata=result.data;
+    			var infoWindow=new AMap.InfoWindow(
+    				{
+    					content:clouddata._name+"<hr/>"
+    					+"地址："+clouddata._address+"<br/>"
+//  					+"创建时间："+clouddata._createtime+"<br/>"
+//  					+"更新时间："+clouddata._updatetime+"<br/>"
+    					+"<strong>PM2.5指数："+clouddata.PM2d5+"<br/></strong>"
+    					+"污染程度："+clouddata.level+"<br/>",
+    					size:new AMap.Size(0,0),
+    					autoMove:true,
+    					offset:new AMap.Pixel(0,-25),
+    				}
+    			)
+    			infoWindow.open(map,clouddata._location);
+    		});
+    	});
+    }
+    //获取污染程度
+    function getLevel(level)
+    {
+    	var op=
+    	{
+    		query:{keywords:level}
+    	}
+    	cloudDataLayer.setOptions(op);
+    }
+    //获取某月数据
+	var monId;
+    function getMonData(month)
+    {
+    	if(month=='13年12月')
+		monId='56e22b347bbf197f399dc03c';
+		if(month=='14年01月')
+		monId='56e28c1d7bbf197f399dc98c';
+    	cloudDataLayer.setMap(map);
+    }
+    
+    
+	
+	
+
+	
+</script>
+</html>
